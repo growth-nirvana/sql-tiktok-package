@@ -18,6 +18,37 @@ SET table_exists = (
 
 IF table_exists THEN
 
+ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
+  ADD COLUMN IF NOT EXISTS creative_material_mode STRING,
+  ADD COLUMN IF NOT EXISTS budget_mode STRING,
+  ADD COLUMN IF NOT EXISTS scheduled_budget FLOAT64,
+  ADD COLUMN IF NOT EXISTS placement_type STRING,
+  ADD COLUMN IF NOT EXISTS languages STRING,
+  ADD COLUMN IF NOT EXISTS deep_bid_type STRING,
+  ADD COLUMN IF NOT EXISTS skip_learning_phase BOOL,
+  ADD COLUMN IF NOT EXISTS gender STRING,
+  ADD COLUMN IF NOT EXISTS pixel_id STRING,
+  ADD COLUMN IF NOT EXISTS frequency_schedule INT64,
+  ADD COLUMN IF NOT EXISTS frequency INT64,
+  ADD COLUMN IF NOT EXISTS ios14_quota_type STRING,
+  ADD COLUMN IF NOT EXISTS bid_type STRING,
+  ADD COLUMN IF NOT EXISTS advertiser_id STRING,
+  ADD COLUMN IF NOT EXISTS dayparting STRING,
+  ADD COLUMN IF NOT EXISTS pacing STRING,
+  ADD COLUMN IF NOT EXISTS is_hfss BOOL,
+  ADD COLUMN IF NOT EXISTS campaign_name STRING,
+  ADD COLUMN IF NOT EXISTS campaign_id STRING,
+  ADD COLUMN IF NOT EXISTS adgroup_name STRING,
+  ADD COLUMN IF NOT EXISTS billing_event STRING,
+  ADD COLUMN IF NOT EXISTS budget FLOAT64,
+  ADD COLUMN IF NOT EXISTS is_new_structure BOOL,
+  ADD COLUMN IF NOT EXISTS schedule_type STRING,
+  ADD COLUMN IF NOT EXISTS modify_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS schedule_end_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS create_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS schedule_start_time TIMESTAMP;
+
+
 -- Create SCD table if it doesn't exist
 CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   adgroup_id STRING NOT NULL,
