@@ -18,6 +18,36 @@ SET table_exists = (
 
 IF table_exists THEN
 
+ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
+  ADD COLUMN IF NOT EXISTS ad_format STRING,
+  ADD COLUMN IF NOT EXISTS campaign_name STRING,
+  ADD COLUMN IF NOT EXISTS identity_type STRING,
+  ADD COLUMN IF NOT EXISTS campaign_id STRING,
+  ADD COLUMN IF NOT EXISTS brand_safety_postbid_partner STRING,
+  ADD COLUMN IF NOT EXISTS ad_name STRING,
+  ADD COLUMN IF NOT EXISTS avatar_icon_web_uri STRING,
+  ADD COLUMN IF NOT EXISTS adgroup_id STRING,
+  ADD COLUMN IF NOT EXISTS image_ids STRING,
+  ADD COLUMN IF NOT EXISTS call_to_action_id STRING,
+  ADD COLUMN IF NOT EXISTS video_id STRING,
+  ADD COLUMN IF NOT EXISTS adgroup_name STRING,
+  ADD COLUMN IF NOT EXISTS advertiser_id STRING,
+  ADD COLUMN IF NOT EXISTS creative_type STRING,
+  ADD COLUMN IF NOT EXISTS landing_page_url STRING,
+  ADD COLUMN IF NOT EXISTS call_to_action STRING,
+  ADD COLUMN IF NOT EXISTS identity_id STRING,
+  ADD COLUMN IF NOT EXISTS page_id FLOAT64,
+  ADD COLUMN IF NOT EXISTS display_name STRING,
+  ADD COLUMN IF NOT EXISTS playable_url STRING,
+  ADD COLUMN IF NOT EXISTS is_new_structure BOOL,
+  ADD COLUMN IF NOT EXISTS click_tracking_url STRING,
+  ADD COLUMN IF NOT EXISTS ad_text STRING,
+  ADD COLUMN IF NOT EXISTS is_aco BOOL,
+  ADD COLUMN IF NOT EXISTS app_name STRING,
+  ADD COLUMN IF NOT EXISTS fallback_type STRING,
+  ADD COLUMN IF NOT EXISTS modify_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS create_time TIMESTAMP;
+
 -- Create SCD table if it doesn't exist
 CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   ad_id STRING NOT NULL,
