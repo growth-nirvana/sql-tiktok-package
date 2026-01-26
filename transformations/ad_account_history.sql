@@ -45,14 +45,7 @@ CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   _gn_id STRING
 );
 
--- Extract latest snapshot from source
-CREATE TEMP TABLE latest_snapshot AS
-SELECT
-  *,
-  ROW_NUMBER() OVER (PARTITION BY advertiser_id ORDER BY _time_extracted DESC) AS rn
-FROM `{{source_dataset}}.{{source_table_id}}`;
-
--- SCD Merge Logic
+-- Merge Logic
 MERGE `{{target_dataset}}.{{target_table_id}}` AS target
 USING (
   SELECT
@@ -99,56 +92,32 @@ USING (
       SAFE_CAST(license_no AS STRING),
       SAFE_CAST(tenant AS STRING)
     ]))) AS _gn_id
-  FROM latest_snapshot
-  WHERE rn = 1
+  FROM `{{source_dataset}}.{{source_table_id}}`
 ) AS source
-ON target.advertiser_id = source.advertiser_id AND target.is_current = TRUE
-WHEN MATCHED AND
-  TO_HEX(MD5(TO_JSON_STRING([
-    SAFE_CAST(target.advertiser_id AS STRING),
-    SAFE_CAST(target.name AS STRING),
-    SAFE_CAST(target.company AS STRING),
-    SAFE_CAST(target.contacter AS STRING),
-    SAFE_CAST(target.promotion_area AS STRING),
-    SAFE_CAST(target.balance AS STRING),
-    SAFE_CAST(target.currency AS STRING),
-    SAFE_CAST(target.display_timezone AS STRING),
-    SAFE_CAST(target.email AS STRING),
-    SAFE_CAST(target.language AS STRING),
-    SAFE_CAST(target.industry AS STRING),
-    SAFE_CAST(target.create_time AS STRING),
-    SAFE_CAST(target.role AS STRING),
-    SAFE_CAST(target.timezone AS STRING),
-    SAFE_CAST(target.country AS STRING),
-    SAFE_CAST(target.status AS STRING),
-    SAFE_CAST(target.description AS STRING),
-    SAFE_CAST(target.license_no AS STRING),
-    SAFE_CAST(target.tenant AS STRING)
-  ]))) !=
-  TO_HEX(MD5(TO_JSON_STRING([
-    SAFE_CAST(source.advertiser_id AS STRING),
-    SAFE_CAST(source.name AS STRING),
-    SAFE_CAST(source.company AS STRING),
-    SAFE_CAST(source.contacter AS STRING),
-    SAFE_CAST(source.promotion_area AS STRING),
-    SAFE_CAST(source.balance AS STRING),
-    SAFE_CAST(source.currency AS STRING),
-    SAFE_CAST(source.display_timezone AS STRING),
-    SAFE_CAST(source.email AS STRING),
-    SAFE_CAST(source.language AS STRING),
-    SAFE_CAST(source.industry AS STRING),
-    SAFE_CAST(source.create_time AS STRING),
-    SAFE_CAST(source.role AS STRING),
-    SAFE_CAST(source.timezone AS STRING),
-    SAFE_CAST(source.country AS STRING),
-    SAFE_CAST(source.status AS STRING),
-    SAFE_CAST(source.description AS STRING),
-    SAFE_CAST(source.license_no AS STRING),
-    SAFE_CAST(source.tenant AS STRING)
-  ])))
-  THEN UPDATE SET
-    effective_to = source.effective_from,
-    is_current = FALSE
+ON target.advertiser_id = source.advertiser_id
+WHEN MATCHED THEN UPDATE SET
+  name = source.name,
+  company = source.company,
+  contacter = source.contacter,
+  promotion_area = source.promotion_area,
+  balance = source.balance,
+  currency = source.currency,
+  display_timezone = source.display_timezone,
+  email = source.email,
+  language = source.language,
+  industry = source.industry,
+  create_time = source.create_time,
+  role = source.role,
+  timezone = source.timezone,
+  country = source.country,
+  status = source.status,
+  description = source.description,
+  license_no = source.license_no,
+  tenant = source.tenant,
+  effective_from = source.effective_from,
+  effective_to = source.effective_to,
+  is_current = source.is_current,
+  _gn_id = source._gn_id
 WHEN NOT MATCHED BY TARGET
   THEN INSERT (
     advertiser_id, name, company, contacter, promotion_area, balance, currency, display_timezone, email, language, industry, create_time, role, timezone, country, status, description, license_no, tenant, effective_from, effective_to, is_current, _gn_id
@@ -157,9 +126,5 @@ WHEN NOT MATCHED BY TARGET
     source.advertiser_id, source.name, source.company, source.contacter, source.promotion_area, source.balance, source.currency, source.display_timezone, source.email, source.language, source.industry, source.create_time, source.role, source.timezone, source.country, source.status, source.description, source.license_no, source.tenant, source.effective_from, source.effective_to, source.is_current, source._gn_id
   );
 
--- Optionally drop the source table if drop_source_table is true
-{% if drop_source_table %}
-  DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
-{% endif %}
 
 END IF; 

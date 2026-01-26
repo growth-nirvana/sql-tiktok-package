@@ -52,14 +52,7 @@ CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   _gn_id STRING
 );
 
--- Extract latest snapshot from source
-CREATE TEMP TABLE latest_snapshot AS
-SELECT
-  *,
-  ROW_NUMBER() OVER (PARTITION BY campaign_id ORDER BY _time_extracted DESC) AS rn
-FROM `{{source_dataset}}.{{source_table_id}}`;
-
--- SCD Merge Logic
+-- Merge Logic
 MERGE `{{target_dataset}}.{{target_table_id}}` AS target
 USING (
   SELECT
@@ -94,44 +87,26 @@ USING (
       SAFE_CAST(modify_time AS STRING),
       SAFE_CAST(tenant AS STRING)
     ]))) AS _gn_id
-  FROM latest_snapshot
-  WHERE rn = 1
+  FROM `{{source_dataset}}.{{source_table_id}}`
 ) AS source
-ON target.campaign_id = source.campaign_id AND target.is_current = TRUE
-WHEN MATCHED AND
-  TO_HEX(MD5(TO_JSON_STRING([
-    SAFE_CAST(target.campaign_id AS STRING),
-    SAFE_CAST(target.campaign_name AS STRING),
-    SAFE_CAST(target.campaign_type AS STRING),
-    SAFE_CAST(target.objective AS STRING),
-    SAFE_CAST(target.objective_type AS STRING),
-    SAFE_CAST(target.advertiser_id AS STRING),
-    SAFE_CAST(target.budget_mode AS STRING),
-    SAFE_CAST(target.is_new_structure AS STRING),
-    SAFE_CAST(target.budget AS STRING),
-    SAFE_CAST(target.roas_bid AS STRING),
-    SAFE_CAST(target.create_time AS STRING),
-    SAFE_CAST(target.modify_time AS STRING),
-    SAFE_CAST(target.tenant AS STRING)
-  ]))) !=
-  TO_HEX(MD5(TO_JSON_STRING([
-    SAFE_CAST(source.campaign_id AS STRING),
-    SAFE_CAST(source.campaign_name AS STRING),
-    SAFE_CAST(source.campaign_type AS STRING),
-    SAFE_CAST(source.objective AS STRING),
-    SAFE_CAST(source.objective_type AS STRING),
-    SAFE_CAST(source.advertiser_id AS STRING),
-    SAFE_CAST(source.budget_mode AS STRING),
-    SAFE_CAST(source.is_new_structure AS STRING),
-    SAFE_CAST(source.budget AS STRING),
-    SAFE_CAST(source.roas_bid AS STRING),
-    SAFE_CAST(source.create_time AS STRING),
-    SAFE_CAST(source.modify_time AS STRING),
-    SAFE_CAST(source.tenant AS STRING)
-  ])))
-  THEN UPDATE SET
-    effective_to = source.effective_from,
-    is_current = FALSE
+ON target.campaign_id = source.campaign_id
+WHEN MATCHED THEN UPDATE SET
+  campaign_name = source.campaign_name,
+  campaign_type = source.campaign_type,
+  objective = source.objective,
+  objective_type = source.objective_type,
+  advertiser_id = source.advertiser_id,
+  budget_mode = source.budget_mode,
+  is_new_structure = source.is_new_structure,
+  budget = source.budget,
+  roas_bid = source.roas_bid,
+  create_time = source.create_time,
+  modify_time = source.modify_time,
+  tenant = source.tenant,
+  effective_from = source.effective_from,
+  effective_to = source.effective_to,
+  is_current = source.is_current,
+  _gn_id = source._gn_id
 WHEN NOT MATCHED BY TARGET
   THEN INSERT (
     campaign_id, campaign_name, campaign_type, objective, objective_type, advertiser_id, budget_mode, is_new_structure, budget, roas_bid, create_time, modify_time, tenant, effective_from, effective_to, is_current, _gn_id
