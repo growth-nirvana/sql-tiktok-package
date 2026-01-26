@@ -87,14 +87,7 @@ CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   _gn_id STRING
 );
 
--- Extract latest snapshot from source
-CREATE TEMP TABLE latest_snapshot AS
-SELECT
-  *,
-  ROW_NUMBER() OVER (PARTITION BY adgroup_id ORDER BY _time_extracted DESC) AS rn
-FROM `{{source_dataset}}.{{source_table_id}}`;
-
--- SCD Merge Logic
+-- Merge Logic
 MERGE `{{target_dataset}}.{{target_table_id}}` AS target
 USING (
   SELECT
@@ -163,78 +156,43 @@ USING (
       SAFE_CAST(schedule_start_time AS STRING),
       SAFE_CAST(tenant AS STRING)
     ]))) AS _gn_id
-  FROM latest_snapshot
-  WHERE rn = 1
+  FROM `{{source_dataset}}.{{source_table_id}}`
 ) AS source
-ON target.adgroup_id = source.adgroup_id AND target.is_current = TRUE
-WHEN MATCHED AND
-  TO_HEX(MD5(TO_JSON_STRING([
-    SAFE_CAST(target.adgroup_id AS STRING),
-    SAFE_CAST(target.creative_material_mode AS STRING),
-    SAFE_CAST(target.budget_mode AS STRING),
-    SAFE_CAST(target.scheduled_budget AS STRING),
-    SAFE_CAST(target.placement_type AS STRING),
-    SAFE_CAST(target.languages AS STRING),
-    SAFE_CAST(target.deep_bid_type AS STRING),
-    SAFE_CAST(target.skip_learning_phase AS STRING),
-    SAFE_CAST(target.gender AS STRING),
-    SAFE_CAST(target.pixel_id AS STRING),
-    SAFE_CAST(target.frequency_schedule AS STRING),
-    SAFE_CAST(target.frequency AS STRING),
-    SAFE_CAST(target.ios14_quota_type AS STRING),
-    SAFE_CAST(target.bid_type AS STRING),
-    SAFE_CAST(target.advertiser_id AS STRING),
-    SAFE_CAST(target.dayparting AS STRING),
-    SAFE_CAST(target.pacing AS STRING),
-    SAFE_CAST(target.is_hfss AS STRING),
-    SAFE_CAST(target.campaign_name AS STRING),
-    SAFE_CAST(target.campaign_id AS STRING),
-    SAFE_CAST(target.adgroup_name AS STRING),
-    SAFE_CAST(target.billing_event AS STRING),
-    SAFE_CAST(target.budget AS STRING),
-    SAFE_CAST(target.is_new_structure AS STRING),
-    SAFE_CAST(target.schedule_type AS STRING),
-    SAFE_CAST(target.modify_time AS STRING),
-    SAFE_CAST(target.schedule_end_time AS STRING),
-    SAFE_CAST(target.create_time AS STRING),
-    SAFE_CAST(target.schedule_start_time AS STRING),
-    SAFE_CAST(target.tenant AS STRING)
-  ]))) !=
-  TO_HEX(MD5(TO_JSON_STRING([
-    SAFE_CAST(source.adgroup_id AS STRING),
-    SAFE_CAST(source.creative_material_mode AS STRING),
-    SAFE_CAST(source.budget_mode AS STRING),
-    SAFE_CAST(source.scheduled_budget AS STRING),
-    SAFE_CAST(source.placement_type AS STRING),
-    SAFE_CAST(source.languages AS STRING),
-    SAFE_CAST(source.deep_bid_type AS STRING),
-    SAFE_CAST(source.skip_learning_phase AS STRING),
-    SAFE_CAST(source.gender AS STRING),
-    SAFE_CAST(source.pixel_id AS STRING),
-    SAFE_CAST(source.frequency_schedule AS STRING),
-    SAFE_CAST(source.frequency AS STRING),
-    SAFE_CAST(source.ios14_quota_type AS STRING),
-    SAFE_CAST(source.bid_type AS STRING),
-    SAFE_CAST(source.advertiser_id AS STRING),
-    SAFE_CAST(source.dayparting AS STRING),
-    SAFE_CAST(source.pacing AS STRING),
-    SAFE_CAST(source.is_hfss AS STRING),
-    SAFE_CAST(source.campaign_name AS STRING),
-    SAFE_CAST(source.campaign_id AS STRING),
-    SAFE_CAST(source.adgroup_name AS STRING),
-    SAFE_CAST(source.billing_event AS STRING),
-    SAFE_CAST(source.budget AS STRING),
-    SAFE_CAST(source.is_new_structure AS STRING),
-    SAFE_CAST(source.schedule_type AS STRING),
-    SAFE_CAST(source.modify_time AS STRING),
-    SAFE_CAST(source.schedule_end_time AS STRING),
-    SAFE_CAST(source.create_time AS STRING),
-    SAFE_CAST(source.schedule_start_time AS STRING),
-    SAFE_CAST(source.tenant AS STRING)
-  ])))
-  THEN UPDATE SET
-    effective_to = source.effective_from,
-    is_current = FALSE
+ON target.adgroup_id = source.adgroup_id
+WHEN MATCHED THEN UPDATE SET
+  creative_material_mode = source.creative_material_mode,
+  budget_mode = source.budget_mode,
+  scheduled_budget = source.scheduled_budget,
+  placement_type = source.placement_type,
+  languages = source.languages,
+  deep_bid_type = source.deep_bid_type,
+  skip_learning_phase = source.skip_learning_phase,
+  gender = source.gender,
+  pixel_id = source.pixel_id,
+  frequency_schedule = source.frequency_schedule,
+  frequency = source.frequency,
+  ios14_quota_type = source.ios14_quota_type,
+  bid_type = source.bid_type,
+  advertiser_id = source.advertiser_id,
+  dayparting = source.dayparting,
+  pacing = source.pacing,
+  is_hfss = source.is_hfss,
+  campaign_name = source.campaign_name,
+  campaign_id = source.campaign_id,
+  adgroup_name = source.adgroup_name,
+  billing_event = source.billing_event,
+  budget = source.budget,
+  is_new_structure = source.is_new_structure,
+  schedule_type = source.schedule_type,
+  modify_time = source.modify_time,
+  schedule_end_time = source.schedule_end_time,
+  create_time = source.create_time,
+  schedule_start_time = source.schedule_start_time,
+  tenant = source.tenant,
+  effective_from = source.effective_from,
+  effective_to = source.effective_to,
+  is_current = source.is_current,
+  _gn_id = source._gn_id
 WHEN NOT MATCHED BY TARGET
   THEN INSERT (
     adgroup_id, creative_material_mode, budget_mode, scheduled_budget, placement_type, languages, deep_bid_type, skip_learning_phase, gender, pixel_id, frequency_schedule, frequency, ios14_quota_type, bid_type, advertiser_id, dayparting, pacing, is_hfss, campaign_name, campaign_id, adgroup_name, billing_event, budget, is_new_structure, schedule_type, modify_time, schedule_end_time, create_time, schedule_start_time, tenant, effective_from, effective_to, is_current, _gn_id
