@@ -1,5 +1,5 @@
 -- ad_accounts_history
--- SCD Type 2 Table for TikTok Ad Accounts
+-- Simple merge on advertiser_id (source truncated each run)
 {% assign target_dataset = vars.target_dataset_id %}
 {% assign target_table_id = 'ad_accounts_history' %}
 
@@ -8,7 +8,6 @@
 
 {% assign drop_source_table = vars.drop_source_table | default: false %}
 
--- Guard clause: check if source table exists
 DECLARE table_exists BOOL DEFAULT FALSE;
 SET table_exists = (
   SELECT COUNT(*) > 0
@@ -18,7 +17,28 @@ SET table_exists = (
 
 IF table_exists THEN
 
--- Create SCD table if it doesn't exist
+-- Ensure source table has all columns (tap may omit columns not in API response)
+ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
+  ADD COLUMN IF NOT EXISTS advertiser_id STRING,
+  ADD COLUMN IF NOT EXISTS name STRING,
+  ADD COLUMN IF NOT EXISTS company STRING,
+  ADD COLUMN IF NOT EXISTS contacter STRING,
+  ADD COLUMN IF NOT EXISTS promotion_area STRING,
+  ADD COLUMN IF NOT EXISTS balance FLOAT64,
+  ADD COLUMN IF NOT EXISTS currency STRING,
+  ADD COLUMN IF NOT EXISTS display_timezone STRING,
+  ADD COLUMN IF NOT EXISTS email STRING,
+  ADD COLUMN IF NOT EXISTS language STRING,
+  ADD COLUMN IF NOT EXISTS industry STRING,
+  ADD COLUMN IF NOT EXISTS create_time INT64,
+  ADD COLUMN IF NOT EXISTS role STRING,
+  ADD COLUMN IF NOT EXISTS timezone STRING,
+  ADD COLUMN IF NOT EXISTS country STRING,
+  ADD COLUMN IF NOT EXISTS status STRING,
+  ADD COLUMN IF NOT EXISTS description STRING,
+  ADD COLUMN IF NOT EXISTS license_no STRING,
+  ADD COLUMN IF NOT EXISTS tenant STRING;
+
 CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   advertiser_id STRING NOT NULL,
   name STRING,
@@ -39,96 +59,60 @@ CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   description STRING,
   license_no STRING,
   tenant STRING,
-  effective_from TIMESTAMP,
-  effective_to TIMESTAMP,
-  is_current BOOLEAN,
-  _gn_id STRING
+  _gn_synced TIMESTAMP
 );
 
--- Merge Logic
 MERGE `{{target_dataset}}.{{target_table_id}}` AS target
-USING (
-  SELECT
-    advertiser_id,
-    name,
-    company,
-    contacter,
-    promotion_area,
-    balance,
-    currency,
-    display_timezone,
-    email,
-    language,
-    industry,
-    create_time,
-    role,
-    timezone,
-    country,
-    status,
-    description,
-    license_no,
-    tenant,
-    _time_extracted AS effective_from,
-    CAST(NULL AS TIMESTAMP) AS effective_to,
-    TRUE AS is_current,
-    TO_HEX(MD5(TO_JSON_STRING([
-      SAFE_CAST(advertiser_id AS STRING),
-      SAFE_CAST(name AS STRING),
-      SAFE_CAST(company AS STRING),
-      SAFE_CAST(contacter AS STRING),
-      SAFE_CAST(promotion_area AS STRING),
-      SAFE_CAST(balance AS STRING),
-      SAFE_CAST(currency AS STRING),
-      SAFE_CAST(display_timezone AS STRING),
-      SAFE_CAST(email AS STRING),
-      SAFE_CAST(language AS STRING),
-      SAFE_CAST(industry AS STRING),
-      SAFE_CAST(create_time AS STRING),
-      SAFE_CAST(role AS STRING),
-      SAFE_CAST(timezone AS STRING),
-      SAFE_CAST(country AS STRING),
-      SAFE_CAST(status AS STRING),
-      SAFE_CAST(description AS STRING),
-      SAFE_CAST(license_no AS STRING),
-      SAFE_CAST(tenant AS STRING)
-    ]))) AS _gn_id
-  FROM `{{source_dataset}}.{{source_table_id}}`
-) AS source
+USING `{{source_dataset}}.{{source_table_id}}` AS source
 ON target.advertiser_id = source.advertiser_id
 WHEN MATCHED THEN UPDATE SET
-  name = source.name,
-  company = source.company,
-  contacter = source.contacter,
-  promotion_area = source.promotion_area,
-  balance = source.balance,
-  currency = source.currency,
-  display_timezone = source.display_timezone,
-  email = source.email,
-  language = source.language,
-  industry = source.industry,
-  create_time = source.create_time,
-  role = source.role,
-  timezone = source.timezone,
-  country = source.country,
-  status = source.status,
-  description = source.description,
-  license_no = source.license_no,
-  tenant = source.tenant,
-  effective_from = source.effective_from,
-  effective_to = source.effective_to,
-  is_current = source.is_current,
-  _gn_id = source._gn_id
-WHEN NOT MATCHED BY TARGET
-  THEN INSERT (
-    advertiser_id, name, company, contacter, promotion_area, balance, currency, display_timezone, email, language, industry, create_time, role, timezone, country, status, description, license_no, tenant, effective_from, effective_to, is_current, _gn_id
-  )
-  VALUES (
-    source.advertiser_id, source.name, source.company, source.contacter, source.promotion_area, source.balance, source.currency, source.display_timezone, source.email, source.language, source.industry, source.create_time, source.role, source.timezone, source.country, source.status, source.description, source.license_no, source.tenant, source.effective_from, source.effective_to, source.is_current, source._gn_id
-  );
+  name = CAST(source.name AS STRING),
+  company = CAST(source.company AS STRING),
+  contacter = CAST(source.contacter AS STRING),
+  promotion_area = CAST(source.promotion_area AS STRING),
+  balance = CAST(source.balance AS FLOAT64),
+  currency = CAST(source.currency AS STRING),
+  display_timezone = CAST(source.display_timezone AS STRING),
+  email = CAST(source.email AS STRING),
+  language = CAST(source.language AS STRING),
+  industry = CAST(source.industry AS STRING),
+  create_time = CAST(source.create_time AS INT64),
+  role = CAST(source.role AS STRING),
+  timezone = CAST(source.timezone AS STRING),
+  country = CAST(source.country AS STRING),
+  status = CAST(source.status AS STRING),
+  description = CAST(source.description AS STRING),
+  license_no = CAST(source.license_no AS STRING),
+  tenant = CAST(source.tenant AS STRING),
+  _gn_synced = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED THEN INSERT (
+  advertiser_id, name, company, contacter, promotion_area, balance, currency, display_timezone, email, language, industry, create_time, role, timezone, country, status, description, license_no, tenant, _gn_synced
+)
+VALUES (
+  source.advertiser_id,
+  CAST(source.name AS STRING),
+  CAST(source.company AS STRING),
+  CAST(source.contacter AS STRING),
+  CAST(source.promotion_area AS STRING),
+  CAST(source.balance AS FLOAT64),
+  CAST(source.currency AS STRING),
+  CAST(source.display_timezone AS STRING),
+  CAST(source.email AS STRING),
+  CAST(source.language AS STRING),
+  CAST(source.industry AS STRING),
+  CAST(source.create_time AS INT64),
+  CAST(source.role AS STRING),
+  CAST(source.timezone AS STRING),
+  CAST(source.country AS STRING),
+  CAST(source.status AS STRING),
+  CAST(source.description AS STRING),
+  CAST(source.license_no AS STRING),
+  CAST(source.tenant AS STRING),
+  CURRENT_TIMESTAMP()
+);
 
--- Optionally drop the source table if drop_source_table is true
 {% if drop_source_table %}
-  DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
+DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
 {% endif %}
 
-END IF; 
+END IF;

@@ -1,5 +1,5 @@
 -- ad_history
--- SCD Type 2 Table for TikTok Ads
+-- Simple merge on ad_id (source truncated each run)
 {% assign target_dataset = vars.target_dataset_id %}
 {% assign target_table_id = 'ad_history' %}
 
@@ -8,7 +8,6 @@
 
 {% assign drop_source_table = vars.drop_source_table | default: false %}
 
--- Guard clause: check if source table exists
 DECLARE table_exists BOOL DEFAULT FALSE;
 SET table_exists = (
   SELECT COUNT(*) > 0
@@ -18,7 +17,9 @@ SET table_exists = (
 
 IF table_exists THEN
 
+-- Ensure source table has all columns (tap may omit columns not in API response)
 ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
+  ADD COLUMN IF NOT EXISTS ad_id STRING,
   ADD COLUMN IF NOT EXISTS ad_format STRING,
   ADD COLUMN IF NOT EXISTS campaign_name STRING,
   ADD COLUMN IF NOT EXISTS identity_type STRING,
@@ -46,9 +47,9 @@ ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
   ADD COLUMN IF NOT EXISTS app_name STRING,
   ADD COLUMN IF NOT EXISTS fallback_type STRING,
   ADD COLUMN IF NOT EXISTS modify_time TIMESTAMP,
-  ADD COLUMN IF NOT EXISTS create_time TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS create_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS tenant STRING;
 
--- Create SCD table if it doesn't exist
 CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   ad_id STRING NOT NULL,
   ad_format STRING,
@@ -80,129 +81,82 @@ CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   modify_time TIMESTAMP,
   create_time TIMESTAMP,
   tenant STRING,
-  effective_from TIMESTAMP,
-  effective_to TIMESTAMP,
-  is_current BOOLEAN,
-  _gn_id STRING
+  _gn_synced TIMESTAMP
 );
 
--- Merge Logic
 MERGE `{{target_dataset}}.{{target_table_id}}` AS target
-USING (
-  SELECT
-    ad_id,
-    ad_format,
-    campaign_name,
-    identity_type,
-    campaign_id,
-    brand_safety_postbid_partner,
-    ad_name,
-    avatar_icon_web_uri,
-    adgroup_id,
-    image_ids,
-    call_to_action_id,
-    video_id,
-    adgroup_name,
-    advertiser_id,
-    creative_type,
-    landing_page_url,
-    call_to_action,
-    identity_id,
-    page_id,
-    display_name,
-    playable_url,
-    is_new_structure,
-    click_tracking_url,
-    ad_text,
-    is_aco,
-    app_name,
-    fallback_type,
-    modify_time,
-    create_time,
-    tenant,
-    _time_extracted AS effective_from,
-    CAST(NULL AS TIMESTAMP) AS effective_to,
-    TRUE AS is_current,
-    TO_HEX(MD5(TO_JSON_STRING([
-      SAFE_CAST(ad_id AS STRING),
-      SAFE_CAST(ad_format AS STRING),
-      SAFE_CAST(campaign_name AS STRING),
-      SAFE_CAST(identity_type AS STRING),
-      SAFE_CAST(campaign_id AS STRING),
-      SAFE_CAST(brand_safety_postbid_partner AS STRING),
-      SAFE_CAST(ad_name AS STRING),
-      SAFE_CAST(avatar_icon_web_uri AS STRING),
-      SAFE_CAST(adgroup_id AS STRING),
-      SAFE_CAST(image_ids AS STRING),
-      SAFE_CAST(call_to_action_id AS STRING),
-      SAFE_CAST(video_id AS STRING),
-      SAFE_CAST(adgroup_name AS STRING),
-      SAFE_CAST(advertiser_id AS STRING),
-      SAFE_CAST(creative_type AS STRING),
-      SAFE_CAST(landing_page_url AS STRING),
-      SAFE_CAST(call_to_action AS STRING),
-      SAFE_CAST(identity_id AS STRING),
-      SAFE_CAST(page_id AS STRING),
-      SAFE_CAST(display_name AS STRING),
-      SAFE_CAST(playable_url AS STRING),
-      SAFE_CAST(is_new_structure AS STRING),
-      SAFE_CAST(click_tracking_url AS STRING),
-      SAFE_CAST(ad_text AS STRING),
-      SAFE_CAST(is_aco AS STRING),
-      SAFE_CAST(app_name AS STRING),
-      SAFE_CAST(fallback_type AS STRING),
-      SAFE_CAST(modify_time AS STRING),
-      SAFE_CAST(create_time AS STRING),
-      SAFE_CAST(tenant AS STRING)
-    ]))) AS _gn_id
-  FROM `{{source_dataset}}.{{source_table_id}}`
-) AS source
+USING `{{source_dataset}}.{{source_table_id}}` AS source
 ON target.ad_id = source.ad_id
 WHEN MATCHED THEN UPDATE SET
-  ad_format = source.ad_format,
-  campaign_name = source.campaign_name,
-  identity_type = source.identity_type,
-  campaign_id = source.campaign_id,
-  brand_safety_postbid_partner = source.brand_safety_postbid_partner,
-  ad_name = source.ad_name,
-  avatar_icon_web_uri = source.avatar_icon_web_uri,
-  adgroup_id = source.adgroup_id,
-  image_ids = source.image_ids,
-  call_to_action_id = source.call_to_action_id,
-  video_id = source.video_id,
-  adgroup_name = source.adgroup_name,
-  advertiser_id = source.advertiser_id,
-  creative_type = source.creative_type,
-  landing_page_url = source.landing_page_url,
-  call_to_action = source.call_to_action,
-  identity_id = source.identity_id,
-  page_id = source.page_id,
-  display_name = source.display_name,
-  playable_url = source.playable_url,
-  is_new_structure = source.is_new_structure,
-  click_tracking_url = source.click_tracking_url,
-  ad_text = source.ad_text,
-  is_aco = source.is_aco,
-  app_name = source.app_name,
-  fallback_type = source.fallback_type,
-  modify_time = source.modify_time,
-  create_time = source.create_time,
-  tenant = source.tenant,
-  effective_from = source.effective_from,
-  effective_to = source.effective_to,
-  is_current = source.is_current,
-  _gn_id = source._gn_id
-WHEN NOT MATCHED BY TARGET
-  THEN INSERT (
-    ad_id, ad_format, campaign_name, identity_type, campaign_id, brand_safety_postbid_partner, ad_name, avatar_icon_web_uri, adgroup_id, image_ids, call_to_action_id, video_id, adgroup_name, advertiser_id, creative_type, landing_page_url, call_to_action, identity_id, page_id, display_name, playable_url, is_new_structure, click_tracking_url, ad_text, is_aco, app_name, fallback_type, modify_time, create_time, tenant, effective_from, effective_to, is_current, _gn_id
-  )
-  VALUES (
-    source.ad_id, source.ad_format, source.campaign_name, source.identity_type, source.campaign_id, source.brand_safety_postbid_partner, source.ad_name, source.avatar_icon_web_uri, source.adgroup_id, source.image_ids, source.call_to_action_id, source.video_id, source.adgroup_name, source.advertiser_id, source.creative_type, source.landing_page_url, source.call_to_action, source.identity_id, source.page_id, source.display_name, source.playable_url, source.is_new_structure, source.click_tracking_url, source.ad_text, source.is_aco, source.app_name, source.fallback_type, source.modify_time, source.create_time, source.tenant, source.effective_from, source.effective_to, source.is_current, source._gn_id
-  );
+  ad_format = SAFE_CAST(source.ad_format AS STRING),
+  campaign_name = SAFE_CAST(source.campaign_name AS STRING),
+  identity_type = SAFE_CAST(source.identity_type AS STRING),
+  campaign_id = SAFE_CAST(source.campaign_id AS STRING),
+  brand_safety_postbid_partner = SAFE_CAST(source.brand_safety_postbid_partner AS STRING),
+  ad_name = SAFE_CAST(source.ad_name AS STRING),
+  avatar_icon_web_uri = SAFE_CAST(source.avatar_icon_web_uri AS STRING),
+  adgroup_id = SAFE_CAST(source.adgroup_id AS STRING),
+  image_ids = SAFE_CAST(source.image_ids AS STRING),
+  call_to_action_id = SAFE_CAST(source.call_to_action_id AS STRING),
+  video_id = SAFE_CAST(source.video_id AS STRING),
+  adgroup_name = SAFE_CAST(source.adgroup_name AS STRING),
+  advertiser_id = SAFE_CAST(source.advertiser_id AS STRING),
+  creative_type = SAFE_CAST(source.creative_type AS STRING),
+  landing_page_url = SAFE_CAST(source.landing_page_url AS STRING),
+  call_to_action = SAFE_CAST(source.call_to_action AS STRING),
+  identity_id = SAFE_CAST(source.identity_id AS STRING),
+  page_id = SAFE_CAST(source.page_id AS FLOAT64),
+  display_name = SAFE_CAST(source.display_name AS STRING),
+  playable_url = SAFE_CAST(source.playable_url AS STRING),
+  is_new_structure = SAFE_CAST(source.is_new_structure AS BOOL),
+  click_tracking_url = SAFE_CAST(source.click_tracking_url AS STRING),
+  ad_text = SAFE_CAST(source.ad_text AS STRING),
+  is_aco = SAFE_CAST(source.is_aco AS BOOL),
+  app_name = SAFE_CAST(source.app_name AS STRING),
+  fallback_type = SAFE_CAST(source.fallback_type AS STRING),
+  modify_time = SAFE_CAST(source.modify_time AS TIMESTAMP),
+  create_time = SAFE_CAST(source.create_time AS TIMESTAMP),
+  tenant = SAFE_CAST(source.tenant AS STRING),
+  _gn_synced = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED THEN INSERT (
+  ad_id, ad_format, campaign_name, identity_type, campaign_id, brand_safety_postbid_partner, ad_name, avatar_icon_web_uri, adgroup_id, image_ids, call_to_action_id, video_id, adgroup_name, advertiser_id, creative_type, landing_page_url, call_to_action, identity_id, page_id, display_name, playable_url, is_new_structure, click_tracking_url, ad_text, is_aco, app_name, fallback_type, modify_time, create_time, tenant, _gn_synced
+)
+VALUES (
+  source.ad_id,
+  SAFE_CAST(source.ad_format AS STRING),
+  SAFE_CAST(source.campaign_name AS STRING),
+  SAFE_CAST(source.identity_type AS STRING),
+  SAFE_CAST(source.campaign_id AS STRING),
+  SAFE_CAST(source.brand_safety_postbid_partner AS STRING),
+  SAFE_CAST(source.ad_name AS STRING),
+  SAFE_CAST(source.avatar_icon_web_uri AS STRING),
+  SAFE_CAST(source.adgroup_id AS STRING),
+  SAFE_CAST(source.image_ids AS STRING),
+  SAFE_CAST(source.call_to_action_id AS STRING),
+  SAFE_CAST(source.video_id AS STRING),
+  SAFE_CAST(source.adgroup_name AS STRING),
+  SAFE_CAST(source.advertiser_id AS STRING),
+  SAFE_CAST(source.creative_type AS STRING),
+  SAFE_CAST(source.landing_page_url AS STRING),
+  SAFE_CAST(source.call_to_action AS STRING),
+  SAFE_CAST(source.identity_id AS STRING),
+  SAFE_CAST(source.page_id AS FLOAT64),
+  SAFE_CAST(source.display_name AS STRING),
+  SAFE_CAST(source.playable_url AS STRING),
+  SAFE_CAST(source.is_new_structure AS BOOL),
+  SAFE_CAST(source.click_tracking_url AS STRING),
+  SAFE_CAST(source.ad_text AS STRING),
+  SAFE_CAST(source.is_aco AS BOOL),
+  SAFE_CAST(source.app_name AS STRING),
+  SAFE_CAST(source.fallback_type AS STRING),
+  SAFE_CAST(source.modify_time AS TIMESTAMP),
+  SAFE_CAST(source.create_time AS TIMESTAMP),
+  SAFE_CAST(source.tenant AS STRING),
+  CURRENT_TIMESTAMP()
+);
 
--- Optionally drop the source table if drop_source_table is true
 {% if drop_source_table %}
-  DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
+DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
 {% endif %}
 
-END IF; 
+END IF;

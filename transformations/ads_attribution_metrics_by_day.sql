@@ -1,7 +1,7 @@
 -- ads_attribution_metrics_by_day_report
 -- Batch-based daily snapshot table for TikTok Ads Attribution Metrics
 {% assign target_dataset = vars.target_dataset_id %}
-{% assign target_table_id = 'ads_attribution_metrics_by_day_report' %}
+{% assign target_table_id = 'ads_attribution_metrics_by_day' %}
 
 {% assign source_dataset = vars.source_dataset_id %}
 {% assign source_table_id = 'ads_attribution_metrics_by_day' %}

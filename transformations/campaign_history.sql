@@ -1,5 +1,5 @@
 -- campaign_history
--- SCD Type 2 Table for TikTok Campaigns
+-- Simple merge on campaign_id (source truncated each run)
 {% assign target_dataset = vars.target_dataset_id %}
 {% assign target_table_id = 'campaign_history' %}
 
@@ -8,7 +8,6 @@
 
 {% assign drop_source_table = vars.drop_source_table | default: false %}
 
--- Guard clause: check if source table exists
 DECLARE table_exists BOOL DEFAULT FALSE;
 SET table_exists = (
   SELECT COUNT(*) > 0
@@ -18,7 +17,9 @@ SET table_exists = (
 
 IF table_exists THEN
 
+-- Ensure source table has all columns (tap may omit columns not in API response)
 ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
+  ADD COLUMN IF NOT EXISTS campaign_id STRING,
   ADD COLUMN IF NOT EXISTS campaign_name STRING,
   ADD COLUMN IF NOT EXISTS campaign_type STRING,
   ADD COLUMN IF NOT EXISTS objective STRING,
@@ -29,9 +30,9 @@ ALTER TABLE `{{source_dataset}}.{{source_table_id}}`
   ADD COLUMN IF NOT EXISTS budget FLOAT64,
   ADD COLUMN IF NOT EXISTS roas_bid FLOAT64,
   ADD COLUMN IF NOT EXISTS create_time TIMESTAMP,
-  ADD COLUMN IF NOT EXISTS modify_time TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS modify_time TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS tenant STRING;
 
--- Create SCD table if it doesn't exist
 CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   campaign_id STRING NOT NULL,
   campaign_name STRING,
@@ -46,78 +47,48 @@ CREATE TABLE IF NOT EXISTS `{{target_dataset}}.{{target_table_id}}` (
   create_time TIMESTAMP,
   modify_time TIMESTAMP,
   tenant STRING,
-  effective_from TIMESTAMP,
-  effective_to TIMESTAMP,
-  is_current BOOLEAN,
-  _gn_id STRING
+  _gn_synced TIMESTAMP
 );
 
--- Merge Logic
 MERGE `{{target_dataset}}.{{target_table_id}}` AS target
-USING (
-  SELECT
-    campaign_id,
-    campaign_name,
-    campaign_type,
-    objective,
-    objective_type,
-    advertiser_id,
-    budget_mode,
-    is_new_structure,
-    budget,
-    roas_bid,
-    create_time,
-    modify_time,
-    tenant,
-    _time_extracted AS effective_from,
-    CAST(NULL AS TIMESTAMP) AS effective_to,
-    TRUE AS is_current,
-    TO_HEX(MD5(TO_JSON_STRING([
-      SAFE_CAST(campaign_id AS STRING),
-      SAFE_CAST(campaign_name AS STRING),
-      SAFE_CAST(campaign_type AS STRING),
-      SAFE_CAST(objective AS STRING),
-      SAFE_CAST(objective_type AS STRING),
-      SAFE_CAST(advertiser_id AS STRING),
-      SAFE_CAST(budget_mode AS STRING),
-      SAFE_CAST(is_new_structure AS STRING),
-      SAFE_CAST(budget AS STRING),
-      SAFE_CAST(roas_bid AS STRING),
-      SAFE_CAST(create_time AS STRING),
-      SAFE_CAST(modify_time AS STRING),
-      SAFE_CAST(tenant AS STRING)
-    ]))) AS _gn_id
-  FROM `{{source_dataset}}.{{source_table_id}}`
-) AS source
+USING `{{source_dataset}}.{{source_table_id}}` AS source
 ON target.campaign_id = source.campaign_id
 WHEN MATCHED THEN UPDATE SET
-  campaign_name = source.campaign_name,
-  campaign_type = source.campaign_type,
-  objective = source.objective,
-  objective_type = source.objective_type,
-  advertiser_id = source.advertiser_id,
-  budget_mode = source.budget_mode,
-  is_new_structure = source.is_new_structure,
-  budget = source.budget,
-  roas_bid = source.roas_bid,
-  create_time = source.create_time,
-  modify_time = source.modify_time,
-  tenant = source.tenant,
-  effective_from = source.effective_from,
-  effective_to = source.effective_to,
-  is_current = source.is_current,
-  _gn_id = source._gn_id
-WHEN NOT MATCHED BY TARGET
-  THEN INSERT (
-    campaign_id, campaign_name, campaign_type, objective, objective_type, advertiser_id, budget_mode, is_new_structure, budget, roas_bid, create_time, modify_time, tenant, effective_from, effective_to, is_current, _gn_id
-  )
-  VALUES (
-    source.campaign_id, source.campaign_name, source.campaign_type, source.objective, source.objective_type, source.advertiser_id, source.budget_mode, source.is_new_structure, source.budget, source.roas_bid, source.create_time, source.modify_time, source.tenant, source.effective_from, source.effective_to, source.is_current, source._gn_id
-  );
+  campaign_name = SAFE_CAST(source.campaign_name AS STRING),
+  campaign_type = SAFE_CAST(source.campaign_type AS STRING),
+  objective = SAFE_CAST(source.objective AS STRING),
+  objective_type = SAFE_CAST(source.objective_type AS STRING),
+  advertiser_id = SAFE_CAST(source.advertiser_id AS STRING),
+  budget_mode = SAFE_CAST(source.budget_mode AS STRING),
+  is_new_structure = SAFE_CAST(source.is_new_structure AS BOOL),
+  budget = SAFE_CAST(source.budget AS FLOAT64),
+  roas_bid = SAFE_CAST(source.roas_bid AS FLOAT64),
+  create_time = SAFE_CAST(source.create_time AS TIMESTAMP),
+  modify_time = SAFE_CAST(source.modify_time AS TIMESTAMP),
+  tenant = SAFE_CAST(source.tenant AS STRING),
+  _gn_synced = CURRENT_TIMESTAMP()
+WHEN NOT MATCHED THEN INSERT (
+  campaign_id, campaign_name, campaign_type, objective, objective_type, advertiser_id, budget_mode, is_new_structure, budget, roas_bid, create_time, modify_time, tenant, _gn_synced
+)
+VALUES (
+  source.campaign_id,
+  SAFE_CAST(source.campaign_name AS STRING),
+  SAFE_CAST(source.campaign_type AS STRING),
+  SAFE_CAST(source.objective AS STRING),
+  SAFE_CAST(source.objective_type AS STRING),
+  SAFE_CAST(source.advertiser_id AS STRING),
+  SAFE_CAST(source.budget_mode AS STRING),
+  SAFE_CAST(source.is_new_structure AS BOOL),
+  SAFE_CAST(source.budget AS FLOAT64),
+  SAFE_CAST(source.roas_bid AS FLOAT64),
+  SAFE_CAST(source.create_time AS TIMESTAMP),
+  SAFE_CAST(source.modify_time AS TIMESTAMP),
+  SAFE_CAST(source.tenant AS STRING),
+  CURRENT_TIMESTAMP()
+);
 
--- Optionally drop the source table if drop_source_table is true
 {% if drop_source_table %}
-  DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
+DROP TABLE IF EXISTS `{{source_dataset}}.{{source_table_id}}`;
 {% endif %}
 
-END IF; 
+END IF;
